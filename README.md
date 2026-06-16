@@ -34,4 +34,5 @@ Configure **Settings → Pages**: Branch=`main`, Folder=`/docs`.
 ```bash
 node tools/verify_byte_line_buffer.mjs
 node tools/verify_image_recovery.mjs
+node tools/verify_packet_diagnostics.mjs
 ```
