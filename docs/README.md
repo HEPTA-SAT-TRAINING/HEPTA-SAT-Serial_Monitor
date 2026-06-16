@@ -2,7 +2,7 @@
 
 VS Code Serial Monitor–style web app for HEPTA-SAT Lab5. Receives text downlink over Web Serial, sends single-character commands, and decodes JPEG images when `IMG_BEGIN` is detected.
 
-## Getting started (GitHub Pages)
+## Getting started
 
 ```text
 https://hepta-sat-training.github.io/HEPTA-SAT-Serial_Monitor/
