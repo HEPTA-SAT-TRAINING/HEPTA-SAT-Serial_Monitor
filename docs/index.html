@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HEPTA Serial Viewer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="toolbar">
+      <div class="toolbar-row">
+        <label for="port-select" class="sr-only">COM Port</label>
+        <select id="port-select" title="COM Port">
+          <option value="" disabled selected>No port</option>
+        </select>
+        <button id="btn-add-port" type="button" class="btn-secondary">Add Port</button>
+        <button id="btn-refresh-ports" type="button" class="btn-secondary" title="Refresh port list">Refresh</button>
+        <button id="btn-connect" type="button" disabled>Connect</button>
+        <button id="btn-disconnect" type="button" class="btn-secondary" disabled>Disconnect</button>
+        <label for="baudrate">Baud:</label>
+        <input id="baudrate" type="number" value="38400" min="300" max="921600" step="1">
+        <button id="btn-clear" type="button" class="btn-secondary">Clear</button>
+        <span id="connection-status" class="status-badge disconnected">Disconnected</span>
+      </div>
+    </header>
+
+    <main class="output-wrap">
+      <pre id="output" class="output" aria-live="polite"></pre>
+    </main>
+
+    <footer class="input-bar">
+      <span class="input-prompt">&gt;</span>
+      <input
+        id="send-input"
+        type="text"
+        placeholder="Type command and press Enter"
+        disabled
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <button id="btn-send" type="button" disabled>Send</button>
+    </footer>
+  </div>
+
+  <div id="image-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-dismiss="modal"></div>
+    <div class="modal-dialog" role="dialog" aria-labelledby="modal-title" aria-modal="true">
+      <header class="modal-header">
+        <h2 id="modal-title">Image received</h2>
+        <button id="btn-modal-close" type="button" class="btn-icon" aria-label="Close">&times;</button>
+      </header>
+      <div class="modal-body">
+        <p id="modal-status" class="modal-status"></p>
+        <div class="modal-preview-wrap">
+          <img id="modal-preview" alt="JPEG preview">
+        </div>
+      </div>
+      <footer class="modal-footer">
+        <button id="btn-save-jpeg" type="button">Save JPEG</button>
+        <button id="btn-modal-dismiss" type="button" class="btn-secondary">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="error-modal" class="modal" hidden>
+    <div class="modal-backdrop" data-dismiss="error-modal"></div>
+    <div class="modal-dialog modal-dialog-sm" role="alertdialog" aria-labelledby="error-modal-title" aria-modal="true">
+      <header class="modal-header">
+        <h2 id="error-modal-title">Image error</h2>
+        <button id="btn-error-close" type="button" class="btn-icon" aria-label="Close">&times;</button>
+      </header>
+      <div class="modal-body">
+        <p id="error-modal-message" class="modal-status error"></p>
+      </div>
+      <footer class="modal-footer">
+        <button id="btn-error-dismiss" type="button" class="btn-secondary">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
