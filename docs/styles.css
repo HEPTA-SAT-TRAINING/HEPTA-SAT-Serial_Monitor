@@ -80,6 +80,26 @@ button {
   cursor: pointer;
 }
 
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.toolbar-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.setup-hint {
+  margin: 0.35rem 0 0;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--warning);
+  background: rgba(220, 220, 170, 0.08);
+  border-radius: 2px;
+}
+
 button:hover:not(:disabled) {
   background: var(--accent-hover);
 }
@@ -130,8 +150,32 @@ input[type="number"] {
 }
 
 #port-select {
-  min-width: 12rem;
-  max-width: 18rem;
+  min-width: 10rem;
+  max-width: 16rem;
+}
+
+#port-select:disabled {
+  opacity: 0.7;
+}
+
+#display-mode,
+#line-ending {
+  min-width: 5rem;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input {
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .status-badge {
@@ -185,6 +229,14 @@ input[type="number"] {
   color: var(--error);
 }
 
+.output .line-hex {
+  color: #9cdcfe;
+}
+
+.output .line-binary {
+  color: #ce9178;
+}
+
 .input-bar {
   flex-shrink: 0;
   display: flex;
@@ -205,6 +257,17 @@ input[type="number"] {
 .input-bar input[type="text"] {
   flex: 1;
   font-family: var(--font-mono);
+}
+
+.input-bar-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+#line-ending {
+  min-width: 4.5rem;
+  font-size: 0.78rem;
 }
 
 .modal {

@@ -2,6 +2,8 @@ import { SerialConnection, formatPortLabel } from "./serial.js";
 import { verifyCrc16SelfTest } from "./crc16.js";
 import { ByteLineBuffer } from "./byte_line_buffer.js";
 import { ImageAssembler } from "./image_assembler.js";
+import { HexLineBuffer } from "./hex_format.js";
+import { saveBlobWithPicker } from "./save_file.js";
 import {
   PacketReceiver,
   PACKET_TYPE_END,
@@ -12,6 +14,19 @@ import {
 const RxState = {
   TEXT_MODE: "TEXT_MODE",
   IMAGE_PACKET_RX: "IMAGE_PACKET_RX",
+};
+
+const DisplayMode = {
+  TEXT: "text",
+  HEX: "hex",
+};
+
+/** @type {Record<string, string>} */
+const LINE_ENDINGS = {
+  none: "",
+  lf: "\n",
+  cr: "\r",
+  crlf: "\r\n",
 };
 
 const PACKET_TIMEOUT_MS = 10000;
@@ -25,6 +40,9 @@ const packetReceiver = new PacketReceiver();
 const imageAssembler = new ImageAssembler();
 
 let rxState = RxState.TEXT_MODE;
+let displayMode = DisplayMode.TEXT;
+let autoScroll = true;
+const hexLineBuffer = new HexLineBuffer();
 const textBuffer = new ByteLineBuffer();
 const textDecoder = new TextDecoder();
 let imageReceiving = false;
@@ -47,7 +65,12 @@ const el = {
   btnConnect: document.getElementById("btn-connect"),
   btnDisconnect: document.getElementById("btn-disconnect"),
   btnClear: document.getElementById("btn-clear"),
+  btnSaveLog: document.getElementById("btn-save-log"),
+  autoScroll: document.getElementById("auto-scroll"),
   baudrate: document.getElementById("baudrate"),
+  displayMode: document.getElementById("display-mode"),
+  lineEnding: document.getElementById("line-ending"),
+  setupHint: document.getElementById("setup-hint"),
   connectionStatus: document.getElementById("connection-status"),
   output: document.getElementById("output"),
   sendInput: document.getElementById("send-input"),
@@ -80,6 +103,9 @@ function init() {
   };
   serial.onDisconnect = () => {
     appendOutput("Serial port disconnected", "warn");
+    if (displayMode === DisplayMode.HEX) {
+      flushHexBuffer();
+    }
     setConnectionUi(false);
     resetImageReceive("Disconnected during image receive");
   };
@@ -90,6 +116,11 @@ function init() {
   el.btnConnect.addEventListener("click", onConnect);
   el.btnDisconnect.addEventListener("click", onDisconnect);
   el.btnClear.addEventListener("click", clearOutput);
+  el.btnSaveLog.addEventListener("click", () => void saveLog());
+  el.autoScroll.addEventListener("change", () => {
+    autoScroll = el.autoScroll.checked;
+  });
+  el.displayMode.addEventListener("change", onDisplayModeChange);
   el.btnSend.addEventListener("click", onSendInput);
   el.sendInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -97,7 +128,7 @@ function init() {
       onSendInput();
     }
   });
-  el.btnSaveJpeg.addEventListener("click", saveJpeg);
+  el.btnSaveJpeg.addEventListener("click", () => void saveJpeg());
   el.btnModalClose.addEventListener("click", hideImageModal);
   el.btnModalDismiss.addEventListener("click", hideImageModal);
   el.btnErrorClose.addEventListener("click", hideErrorModal);
@@ -118,11 +149,30 @@ function init() {
 
   setConnectionUi(false);
   refreshPortList();
+  appendOutput(
+    "Welcome — ① Select Port… → choose COM port → ② Connect (38400 baud). View: Text or Hex.",
+    "warn"
+  );
+}
+
+function onDisplayModeChange() {
+  const previousMode = displayMode;
+  displayMode = el.displayMode.value === DisplayMode.HEX ? DisplayMode.HEX : DisplayMode.TEXT;
+  textBuffer.takeRemaining();
+  if (previousMode === DisplayMode.HEX && displayMode === DisplayMode.TEXT) {
+    appendOutputLines(hexLineBuffer.flush(), "hex");
+  }
+  appendOutput(
+    displayMode === DisplayMode.HEX
+      ? "Display mode: Hex (raw bytes)"
+      : "Display mode: Text (line-oriented)",
+    "warn"
+  );
 }
 
 /**
  * @param {string} message
- * @param {"system" | "error" | "warn"} [level]
+ * @param {"system" | "error" | "warn" | "hex" | "binary"} [level]
  */
 function appendOutput(message, level = "system") {
   const line = document.createElement("div");
@@ -131,12 +181,92 @@ function appendOutput(message, level = "system") {
   }
   line.textContent = message;
   el.output.appendChild(line);
-  el.output.scrollTop = el.output.scrollHeight;
+  scrollOutputIfNeeded();
+}
+
+function scrollOutputIfNeeded() {
+  if (autoScroll) {
+    el.output.scrollTop = el.output.scrollHeight;
+  }
+}
+
+function getLineEndingSuffix() {
+  const key = el.lineEnding.value;
+  return LINE_ENDINGS[key] ?? "";
+}
+
+function formatLineEndingLabel() {
+  const key = el.lineEnding.value;
+  if (key === "none") {
+    return "";
+  }
+  if (key === "lf") {
+    return " +LF";
+  }
+  if (key === "cr") {
+    return " +CR";
+  }
+  if (key === "crlf") {
+    return " +CRLF";
+  }
+  return "";
+}
+
+async function saveLog() {
+  const text = el.output.innerText.trimEnd();
+  if (!text) {
+    appendOutput("Log is empty — nothing to save", "warn");
+    return;
+  }
+
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const blob = new Blob([text + "\n"], { type: "text/plain;charset=utf-8" });
+  const suggestedName = `hepta_serial_log_${ts}.txt`;
+  try {
+    const savedName = await saveBlobWithPicker(
+      blob,
+      suggestedName,
+      {
+        description: "Text file",
+        accept: { "text/plain": [".txt"] },
+      }
+    );
+    appendOutput(`Saved log as ${savedName}`, "warn");
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      appendOutput("Save cancelled", "warn");
+      return;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    appendOutput(`Save failed: ${msg}`, "error");
+  }
+}
+
+/**
+ * @param {string[]} lines
+ * @param {"hex" | "binary"} [level]
+ */
+function appendOutputLines(lines, level = "hex") {
+  for (const message of lines) {
+    appendOutput(message, level);
+  }
+}
+
+/**
+ * @param {Uint8Array} chunk
+ */
+function appendHexChunk(chunk) {
+  appendOutputLines(hexLineBuffer.push(chunk), "hex");
+}
+
+function flushHexBuffer() {
+  appendOutputLines(hexLineBuffer.flush(), "hex");
 }
 
 function clearOutput() {
   el.output.textContent = "";
   imageProgressLine = null;
+  hexLineBuffer.reset();
 }
 
 /**
@@ -149,11 +279,16 @@ function updateImageProgressLine(text) {
     el.output.appendChild(imageProgressLine);
   }
   imageProgressLine.textContent = text;
-  el.output.scrollTop = el.output.scrollHeight;
+  scrollOutputIfNeeded();
 }
 
 function clearImageProgressLine() {
   imageProgressLine = null;
+}
+
+function updateSetupHint() {
+  const needsPort = grantedPorts.length === 0 && !serial.isConnected;
+  el.setupHint.hidden = !needsPort;
 }
 
 /**
@@ -177,7 +312,7 @@ async function refreshPortList(selectPort) {
   if (grantedPorts.length === 0) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "No port — click Add Port";
+    option.textContent = "— authorize a port first —";
     option.disabled = true;
     option.selected = true;
     el.portSelect.appendChild(option);
@@ -201,6 +336,7 @@ async function refreshPortList(selectPort) {
     }
   }
 
+  updateSetupHint();
   updateConnectButton();
 }
 
@@ -225,11 +361,12 @@ async function onAddPort() {
   try {
     const port = await SerialConnection.requestNewPort();
     await refreshPortList(port);
-    appendOutput(`Port added: ${formatPortLabel(port, grantedPorts.indexOf(port))}`);
+    appendOutput(`Port authorized: ${formatPortLabel(port, grantedPorts.indexOf(port))}`, "warn");
+    appendOutput("Now click Connect (step ②).", "warn");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (!msg.includes("cancel")) {
-      appendOutput(`Add port failed: ${msg}`, "error");
+      appendOutput(`Select port failed: ${msg}`, "error");
     }
   }
 }
@@ -251,6 +388,7 @@ function setConnectionUi(connected) {
   const canSend = connected && !imageReceiving;
   el.sendInput.disabled = !canSend;
   el.btnSend.disabled = !canSend;
+  el.lineEnding.disabled = !canSend;
 
   el.connectionStatus.textContent = connected
     ? imageReceiving
@@ -260,17 +398,24 @@ function setConnectionUi(connected) {
   el.connectionStatus.className = `status-badge ${
     connected ? (imageReceiving ? "receiving" : "connected") : "disconnected"
   }`;
+
+  updateSetupHint();
 }
 
 /**
  * @param {Uint8Array} chunk
  */
 function onSerialChunk(chunk) {
-  if (rxState === RxState.TEXT_MODE) {
-    processTextChunk(chunk);
-  } else {
-    processImageChunk(chunk);
+  if (displayMode === DisplayMode.HEX) {
+    appendHexChunk(chunk);
   }
+
+  if (rxState === RxState.IMAGE_PACKET_RX) {
+    processImageChunk(chunk);
+    return;
+  }
+
+  processTextChunk(chunk);
 }
 
 /**
@@ -289,7 +434,9 @@ function processTextChunk(chunk) {
 
     if (line === "IMG_BEGIN" || line === "IMG_END") {
       if (line === "IMG_END") {
-        appendOutput("IMG_END");
+        if (displayMode !== DisplayMode.HEX) {
+          appendOutput("IMG_END");
+        }
         continue;
       }
       beginImageReceive();
@@ -300,7 +447,7 @@ function processTextChunk(chunk) {
       return;
     }
 
-    if (line) {
+    if (line && displayMode !== DisplayMode.HEX) {
       appendOutput(line);
     }
   }
@@ -324,7 +471,9 @@ function beginImageReceive() {
   startImageTimeout();
   resetPacketTimeout();
   setConnectionUi(true);
-  appendOutput("IMG_BEGIN — switching to binary packet mode", "warn");
+  if (displayMode !== DisplayMode.HEX) {
+    appendOutput("IMG_BEGIN — binary image packets follow (HP…)", "warn");
+  }
 }
 
 /**
@@ -374,10 +523,12 @@ function handleImagePacket(packet) {
   if (!hadMeta && imageAssembler.meta) {
     const meta = imageAssembler.meta;
     updateImageProgressLine(`Receiving image... 0 / ${meta.imageSize} bytes`);
-    appendOutput(
-      `START: id=${meta.imageId}, size=${meta.imageSize}, image_crc=0x${meta.imageCrc16.toString(16).padStart(4, "0")}, total_packets=${packet.total}`,
-      "warn"
-    );
+    if (displayMode !== DisplayMode.HEX) {
+      appendOutput(
+        `START: id=${meta.imageId}, size=${meta.imageSize}, image_crc=0x${meta.imageCrc16.toString(16).padStart(4, "0")}, total_packets=${packet.total}`,
+        "warn"
+      );
+    }
   }
   if (imageAssembler.meta) {
     updateImageProgressLine(
@@ -417,7 +568,11 @@ function handleErrorPacket(packet) {
 
 function flushPacketBufferToText() {
   if (packetReceiver.buffer.length > 0) {
-    processTextChunk(packetReceiver.buffer);
+    if (displayMode === DisplayMode.HEX) {
+      appendHexChunk(packetReceiver.buffer);
+    } else {
+      processTextChunk(packetReceiver.buffer);
+    }
     packetReceiver.reset();
   }
 }
@@ -488,10 +643,14 @@ function startImageTimeout() {
 }
 
 async function onConnect() {
-  const port = getSelectedPort();
+  let port = getSelectedPort();
   if (!port) {
-    appendOutput("Select a COM port or click Add Port", "error");
-    return;
+    appendOutput("No port selected — opening port picker…", "warn");
+    await onAddPort();
+    port = getSelectedPort();
+    if (!port) {
+      return;
+    }
   }
 
   const baud = parseInt(el.baudrate.value, 10);
@@ -536,8 +695,9 @@ async function onSendInput() {
   }
 
   try {
-    await serial.write(text);
-    appendOutput(`> ${text}`, "warn");
+    const suffix = getLineEndingSuffix();
+    await serial.write(text + suffix);
+    appendOutput(`> ${text}${formatLineEndingLabel()}`, "warn");
     el.sendInput.value = "";
 
     if (text === "p") {
@@ -580,18 +740,31 @@ function hideErrorModal() {
   el.errorModal.hidden = true;
 }
 
-function saveJpeg() {
+async function saveJpeg() {
   if (!currentImageBlob) {
     return;
   }
   const id = lastImageId;
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(currentImageBlob);
-  a.download = `hepta_image_${id}_${ts}.jpg`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  appendOutput(`Saved JPEG as ${a.download}`, "warn");
+  const suggestedName = `hepta_image_${id}_${ts}.jpg`;
+  try {
+    const savedName = await saveBlobWithPicker(
+      currentImageBlob,
+      suggestedName,
+      {
+        description: "JPEG image",
+        accept: { "image/jpeg": [".jpg"] },
+      }
+    );
+    appendOutput(`Saved JPEG as ${savedName}`, "warn");
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      appendOutput("Save cancelled", "warn");
+      return;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    appendOutput(`Save failed: ${msg}`, "error");
+  }
 }
 
 init();

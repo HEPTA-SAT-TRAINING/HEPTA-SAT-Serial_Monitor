@@ -10,19 +10,32 @@
   <div class="app">
     <header class="toolbar">
       <div class="toolbar-row">
-        <label for="port-select" class="sr-only">COM Port</label>
-        <select id="port-select" title="COM Port">
-          <option value="" disabled selected>No port</option>
+        <button id="btn-add-port" type="button" class="btn-primary">① Select Port…</button>
+        <label for="port-select" class="toolbar-label">Port:</label>
+        <select id="port-select" title="Authorized COM ports">
+          <option value="" disabled selected>— authorize a port first —</option>
         </select>
-        <button id="btn-add-port" type="button" class="btn-secondary">Add Port</button>
         <button id="btn-refresh-ports" type="button" class="btn-secondary" title="Refresh port list">Refresh</button>
-        <button id="btn-connect" type="button" disabled>Connect</button>
+        <button id="btn-connect" type="button" disabled>② Connect</button>
         <button id="btn-disconnect" type="button" class="btn-secondary" disabled>Disconnect</button>
         <label for="baudrate">Baud:</label>
         <input id="baudrate" type="number" value="38400" min="300" max="921600" step="1">
+        <label for="display-mode">View:</label>
+        <select id="display-mode" title="Output display mode">
+          <option value="text">Text</option>
+          <option value="hex">Hex</option>
+        </select>
+        <label class="checkbox-label" title="Scroll output as new data arrives">
+          <input id="auto-scroll" type="checkbox" checked>
+          Auto scroll
+        </label>
+        <button id="btn-save-log" type="button" class="btn-secondary">Save Log</button>
         <button id="btn-clear" type="button" class="btn-secondary">Clear</button>
         <span id="connection-status" class="status-badge disconnected">Disconnected</span>
       </div>
+      <p id="setup-hint" class="setup-hint" hidden>
+        Click <strong>Select Port…</strong> to authorize your COM port in the browser dialog, then choose it from the list and click <strong>Connect</strong>.
+      </p>
     </header>
 
     <main class="output-wrap">
@@ -40,6 +53,13 @@
         spellcheck="false"
       >
       <button id="btn-send" type="button" disabled>Send</button>
+      <label for="line-ending" class="input-bar-label">EOL:</label>
+      <select id="line-ending" title="Line ending appended on send">
+        <option value="none" selected>None</option>
+        <option value="lf">LF</option>
+        <option value="cr">CR</option>
+        <option value="crlf">CRLF</option>
+      </select>
     </footer>
   </div>
 
