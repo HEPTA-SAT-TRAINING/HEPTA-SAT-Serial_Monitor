@@ -8,26 +8,56 @@ VS Code Serial Monitor–style web app for HEPTA-SAT Lab5. Receives text downlin
 https://hepta-sat-training.github.io/hepta-serial-viewer/
 ```
 
-Use **Chrome or Edge**. No additional tools need to be installed.
+Use **Chrome, Edge, or Firefox**. **Safari is not supported**. No additional tools need to be installed.
 
 ## Requirements
 
-- **Browser**: Chrome or Edge (Web Serial API)
+- **Browser**: Chrome, Edge, or Firefox (Web Serial API)
+- **Not supported**: Safari (no Web Serial API support)
 - **Connection**: HTTPS or `localhost`
 - **Default baud rate**: **38400** (fixed HEPTA COM / XBee `BD=5` setting)
 
 ## Usage
 
-1. Click **Add Port** and authorize a COM port
-2. Select the port from the dropdown
-3. Click **Connect**
+1. Click **① Select Port…** and authorize a COM port in the browser dialog
+2. Choose the port from the **Port** dropdown
+3. Click **② Connect**
 4. Serial output appears in the main pane
-5. Type a command in the input bar and press **Enter** or **Send**
+5. Set **View** to **Text** (line-oriented) or **Hex** (raw byte dump)
+6. Type a command in the input bar and press **Enter** or **Send**
+   - Set **EOL** (line ending) if needed — default **None** (single character commands for Lab5)
    - Lab5-04/05: `a` — accelerometer (10 lines)
-   - Lab5-05: `p` — JPEG image (opens in a modal when complete)
-6. Click **Clear** to reset the output pane
+   - Lab5-05: `p` — JPEG image (progress line + modal on complete; use View: Hex to inspect raw packets)
+7. Uncheck **Auto scroll** to freeze the output while reviewing older lines
+8. Click **Save Log** to open a Save dialog and save the output as a `.txt` file
+9. Click **Clear** to reset the output pane
 
-> Only COM ports previously authorized via **Add Port** appear in the dropdown. Use **Refresh** to reload the list.
+> If you click **Connect** without a port, the port picker opens automatically. Use **Refresh** to reload the authorized port list.
+
+### Display modes
+
+| View | Behavior |
+|------|----------|
+| **Text** | HK / count / accel lines as plain text; image packets are not shown (progress line + modal on complete) |
+| **Hex** | All received bytes as offset + hex dump (16 bytes per line), including during JPEG transfer; no decoded text lines |
+
+### Saving files (Log / JPEG)
+
+- **Save Log**: opens the browser's native Save dialog (default filename stays the same).
+- **Save JPEG**: opens the browser's native Save dialog from the image modal (default filename stays the same).
+
+**Default folder**: Web apps cannot reliably force a specific directory for all users/OS. This app lets the browser decide (typically it reopens the last folder used for this site / uses the platform's default).
+
+### Send options
+
+| EOL | Appended on send |
+|-----|------------------|
+| **None** (default) | nothing — use for Lab5 single-character commands (`a`, `p`) |
+| **LF** | `\n` |
+| **CR** | `\r` |
+| **CRLF** | `\r\n` |
+
+Sent commands are echoed in the log as `> command` with `+LF` / `+CR` / `+CRLF` when a line ending is appended.
 
 ## Lab compatibility
 
@@ -71,11 +101,12 @@ docs/
   packet.js           Binary packet parser
   image_assembler.js  Loss-tolerant image reconstruction
   byte_line_buffer.js Line-oriented text buffer
+  hex_format.js       Hex dump and binary preview formatting
 ```
 
 ## Troubleshooting
 
-- **Cannot connect**: Use Chrome/Edge over HTTPS or `localhost`
+- **Cannot connect**: Use Chrome/Edge/Firefox over HTTPS or `localhost` (Safari is not supported)
 - **No data**: Confirm baud rate 38400 and XBee `BD=5` on both modules
 - **Image error**: A single lost packet is recovered automatically; retry `p` if multiple losses occur
 - **Packet timeout**: Transfer aborts after 10 s without a valid packet; image overall timeout is 60 s
