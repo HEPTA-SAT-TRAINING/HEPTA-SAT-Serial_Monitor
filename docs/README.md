@@ -5,7 +5,7 @@ VS Code Serial Monitor–style web app for HEPTA-SAT Lab5. Receives text downlin
 ## Getting started (GitHub Pages)
 
 ```text
-https://hepta-sat-training.github.io/hepta-serial-viewer/
+https://hepta-sat-training.github.io/HEPTA-SAT-Serial_Monitor/
 ```
 
 Use **Chrome, Edge, or Firefox**. **Safari is not supported**. No additional tools need to be installed.

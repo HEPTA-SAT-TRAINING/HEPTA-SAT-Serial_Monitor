@@ -7,7 +7,7 @@ Browser-based serial monitor for HEPTA-SAT Lab5 exercises. Connect over USB, vie
 Open in **Chrome or Edge** (no install required):
 
 ```text
-https://hepta-sat-training.github.io/hepta-serial-viewer/
+https://hepta-sat-training.github.io/HEPTA-SAT-Serial_Monitor/
 ```
 
 1. **Add Port** → select your COM port
