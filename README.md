@@ -35,4 +35,5 @@ Configure **Settings → Pages**: Branch=`main`, Folder=`/docs`.
 node tools/verify_byte_line_buffer.mjs
 node tools/verify_image_recovery.mjs
 node tools/verify_packet_diagnostics.mjs
+node tools/verify_hex_format.mjs
 ```
