@@ -11,11 +11,8 @@
     <header class="toolbar">
       <div class="toolbar-row">
         <button id="btn-add-port" type="button" class="btn-primary">① Select Port…</button>
-        <label for="port-select" class="toolbar-label">Port:</label>
-        <select id="port-select" title="Authorized COM ports">
-          <option value="" disabled selected>— authorize a port first —</option>
-        </select>
-        <button id="btn-refresh-ports" type="button" class="btn-secondary" title="Refresh port list">Refresh</button>
+        <span class="toolbar-label">Port:</span>
+        <span id="port-display" class="port-display" title="Currently selected COM port">— no port selected —</span>
         <button id="btn-connect" type="button" disabled>② Connect</button>
         <button id="btn-disconnect" type="button" class="btn-secondary" disabled>Disconnect</button>
         <label for="baudrate">Baud:</label>
@@ -47,7 +44,7 @@
         <span id="connection-status" class="status-badge disconnected">Disconnected</span>
       </div>
       <p id="setup-hint" class="setup-hint" hidden>
-        Click <strong>Select Port…</strong> to authorize your COM port in the browser dialog, then choose it from the list and click <strong>Connect</strong>.
+        Click <strong>Select Port…</strong> to choose the COM port to use now, then click <strong>Connect</strong>.
       </p>
     </header>
 

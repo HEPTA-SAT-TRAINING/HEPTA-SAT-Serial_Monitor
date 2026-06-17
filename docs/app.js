@@ -53,8 +53,8 @@ let lastImageId = 0;
 let packetTimer = null;
 /** @type {number | null} */
 let imageTimer = null;
-/** @type {SerialPort[]} */
-let grantedPorts = [];
+/** @type {SerialPort | null} */
+let currentPort = null;
 /** @type {HTMLElement | null} */
 let imageProgressLine = null;
 /** @type {string[]} */
@@ -63,9 +63,8 @@ let sendHistoryIndex = -1;
 let sendHistoryDraft = "";
 
 const el = {
-  portSelect: document.getElementById("port-select"),
+  portDisplay: document.getElementById("port-display"),
   btnAddPort: document.getElementById("btn-add-port"),
-  btnRefreshPorts: document.getElementById("btn-refresh-ports"),
   btnConnect: document.getElementById("btn-connect"),
   btnDisconnect: document.getElementById("btn-disconnect"),
   btnClear: document.getElementById("btn-clear"),
@@ -112,11 +111,10 @@ function init() {
     }
     setConnectionUi(false);
     resetImageReceive("Disconnected during image receive");
+    void syncCurrentPortPermission();
   };
 
   el.btnAddPort.addEventListener("click", onAddPort);
-  el.btnRefreshPorts.addEventListener("click", () => refreshPortList());
-  el.portSelect.addEventListener("change", updateConnectButton);
   el.btnConnect.addEventListener("click", onConnect);
   el.btnDisconnect.addEventListener("click", onDisconnect);
   el.btnClear.addEventListener("click", clearOutput);
@@ -147,9 +145,9 @@ function init() {
   }
 
   setConnectionUi(false);
-  refreshPortList();
+  syncCurrentPortPermission();
   appendOutput(
-    "Welcome — ① Select Port… → choose COM port → ② Connect (38400 baud). View: Text or Hex.",
+    "Welcome — ① Select Port… → ② Connect (38400 baud). View: Text or Hex.",
     "warn"
   );
 }
@@ -369,81 +367,71 @@ function clearImageProgressLine() {
 }
 
 function updateSetupHint() {
-  const needsPort = grantedPorts.length === 0 && !serial.isConnected;
+  const needsPort = !currentPort && !serial.isConnected;
   el.setupHint.hidden = !needsPort;
 }
 
 /**
- * @param {SerialPort | null | undefined} selectPort
+ * @param {SerialPort} a
+ * @param {SerialPort} b
  */
-async function refreshPortList(selectPort) {
-  const previousIndex = el.portSelect.value;
+function isSamePort(a, b) {
+  const aInfo = a.getInfo();
+  const bInfo = b.getInfo();
+  return (
+    aInfo.usbVendorId === bInfo.usbVendorId &&
+    aInfo.usbProductId === bInfo.usbProductId &&
+    aInfo.bluetoothServiceClassId === bInfo.bluetoothServiceClassId
+  );
+}
 
+function renderCurrentPort() {
+  if (!currentPort) {
+    el.portDisplay.textContent = "— no port selected —";
+    el.portDisplay.title = "No COM port selected";
+  } else {
+    const label = formatPortLabel(currentPort, 0);
+    el.portDisplay.textContent = label;
+    el.portDisplay.title = `Current COM port: ${label}`;
+  }
+  updateSetupHint();
+  updateConnectButton();
+}
+
+async function syncCurrentPortPermission() {
+  let ports = [];
   try {
-    grantedPorts = await SerialConnection.getGrantedPorts();
+    ports = await SerialConnection.getGrantedPorts();
   } catch (err) {
     appendOutput(
       `Failed to list ports: ${err instanceof Error ? err.message : String(err)}`,
       "error"
     );
-    grantedPorts = [];
   }
 
-  el.portSelect.textContent = "";
-
-  if (grantedPorts.length === 0) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = "— authorize a port first —";
-    option.disabled = true;
-    option.selected = true;
-    el.portSelect.appendChild(option);
-  } else {
-    grantedPorts.forEach((port, index) => {
-      const option = document.createElement("option");
-      option.value = String(index);
-      option.textContent = formatPortLabel(port, index);
-      el.portSelect.appendChild(option);
-    });
-
-    if (selectPort) {
-      const idx = grantedPorts.indexOf(selectPort);
-      if (idx >= 0) {
-        el.portSelect.value = String(idx);
-      }
-    } else if (previousIndex !== "" && Number(previousIndex) < grantedPorts.length) {
-      el.portSelect.value = previousIndex;
-    } else {
-      el.portSelect.value = "0";
-    }
+  if (currentPort && !ports.some((port) => isSamePort(port, currentPort))) {
+    currentPort = null;
+    appendOutput("Selected port permission is no longer available", "warn");
   }
 
-  updateSetupHint();
-  updateConnectButton();
+  renderCurrentPort();
 }
 
 function updateConnectButton() {
-  const hasSelection =
-    grantedPorts.length > 0 && el.portSelect.value !== "" && !serial.isConnected;
+  const hasSelection = !!currentPort && !serial.isConnected;
   el.btnConnect.disabled = !hasSelection;
 }
 
 function getSelectedPort() {
-  if (el.portSelect.value === "") {
-    return null;
-  }
-  const index = Number(el.portSelect.value);
-  if (!Number.isInteger(index) || index < 0 || index >= grantedPorts.length) {
-    return null;
-  }
-  return grantedPorts[index];
+  return currentPort;
 }
 
 async function onAddPort() {
   try {
     const port = await SerialConnection.requestNewPort();
-    await refreshPortList(port);
-    appendOutput(`Port authorized: ${formatPortLabel(port, grantedPorts.indexOf(port))}`, "warn");
+    currentPort = port;
+    renderCurrentPort();
+    appendOutput(`Port selected: ${formatPortLabel(port, 0)}`, "warn");
     appendOutput("Now click Connect (step ②).", "warn");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -458,9 +446,7 @@ async function onAddPort() {
  */
 function setConnectionUi(connected) {
   el.btnDisconnect.disabled = !connected;
-  el.portSelect.disabled = connected;
   el.btnAddPort.disabled = connected;
-  el.btnRefreshPorts.disabled = connected;
   el.baudrate.disabled = connected;
   updateConnectButton();
   if (connected) {
@@ -741,7 +727,7 @@ async function onConnect() {
     return;
   }
 
-  const portLabel = formatPortLabel(port, Number(el.portSelect.value));
+  const portLabel = formatPortLabel(port, 0);
 
   try {
     await serial.connect(port, baud);

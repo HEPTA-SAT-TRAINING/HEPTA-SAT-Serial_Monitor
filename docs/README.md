@@ -19,20 +19,19 @@ Use **Chrome, Edge, or Firefox**. **Safari is not supported**. No additional too
 
 ## Usage
 
-1. Click **① Select Port…** and authorize a COM port in the browser dialog
-2. Choose the port from the **Port** dropdown
-3. Click **② Connect**
-4. Serial output appears in the main pane
-5. Set **View** to **Text** (line-oriented) or **Hex** (raw byte dump)
-6. Type a command in the input bar and press **Enter** or **Send**
+1. Click **① Select Port…** and choose the COM port to use in the browser dialog
+2. Click **② Connect**
+3. Serial output appears in the main pane
+4. Set **View** to **Text** (line-oriented) or **Hex** (raw byte dump)
+5. Type a command in the input bar and press **Enter** or **Send**
    - Set **EOL** (line ending) if needed — default **None** (single character commands for Lab5)
    - Lab5-04/05: `a` — accelerometer (10 lines)
    - Lab5-05: `p` — JPEG image (progress line + modal on complete; use View: Hex to inspect raw packets)
-7. Uncheck **Auto scroll** to freeze the output while reviewing older lines
-8. Click **Save Log** to open a Save dialog and save the output as a `.txt` file
-9. Click **Clear** to reset the output pane
+6. Uncheck **Auto scroll** to freeze the output while reviewing older lines
+7. Click **Save Log** to open a Save dialog and save the output as a `.txt` file
+8. Click **Clear** to reset the output pane
 
-> If you click **Connect** without a port, the port picker opens automatically. Use **Refresh** to reload the authorized port list.
+> If you click **Connect** without selecting a port first, the port picker opens automatically.
 
 ### Display modes
 
