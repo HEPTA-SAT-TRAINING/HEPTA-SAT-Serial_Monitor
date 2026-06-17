@@ -57,6 +57,10 @@ let imageTimer = null;
 let grantedPorts = [];
 /** @type {HTMLElement | null} */
 let imageProgressLine = null;
+/** @type {string[]} */
+const sendHistory = [];
+let sendHistoryIndex = -1;
+let sendHistoryDraft = "";
 
 const el = {
   portSelect: document.getElementById("port-select"),
@@ -122,12 +126,7 @@ function init() {
   });
   el.displayMode.addEventListener("change", onDisplayModeChange);
   el.btnSend.addEventListener("click", onSendInput);
-  el.sendInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      onSendInput();
-    }
-  });
+  el.sendInput.addEventListener("keydown", onSendInputKeydown);
   el.btnSaveJpeg.addEventListener("click", () => void saveJpeg());
   el.btnModalClose.addEventListener("click", hideImageModal);
   el.btnModalDismiss.addEventListener("click", hideImageModal);
@@ -193,6 +192,89 @@ function scrollOutputIfNeeded() {
 function getLineEndingSuffix() {
   const key = el.lineEnding.value;
   return LINE_ENDINGS[key] ?? "";
+}
+
+function resetSendHistoryNavigation() {
+  sendHistoryIndex = -1;
+  sendHistoryDraft = "";
+}
+
+/**
+ * @param {string} text
+ */
+function pushSendHistory(text) {
+  const last = sendHistory[sendHistory.length - 1];
+  if (text !== last) {
+    sendHistory.push(text);
+    if (sendHistory.length > 100) {
+      sendHistory.shift();
+    }
+  }
+  resetSendHistoryNavigation();
+}
+
+/**
+ * @param {number} direction -1 for older, +1 for newer
+ */
+function navigateSendHistory(direction) {
+  if (sendHistory.length === 0) {
+    return;
+  }
+
+  if (sendHistoryIndex === -1) {
+    if (direction > 0) {
+      return;
+    }
+    sendHistoryDraft = el.sendInput.value;
+    sendHistoryIndex = sendHistory.length;
+  }
+
+  const nextIndex = sendHistoryIndex + direction;
+  if (nextIndex < 0 || nextIndex > sendHistory.length) {
+    return;
+  }
+
+  if (nextIndex === sendHistory.length) {
+    sendHistoryIndex = -1;
+    el.sendInput.value = sendHistoryDraft;
+    return;
+  }
+
+  sendHistoryIndex = nextIndex;
+  el.sendInput.value = sendHistory[sendHistoryIndex];
+}
+
+/**
+ * @param {KeyboardEvent} event
+ */
+function onSendInputKeydown(event) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void onSendInput();
+    return;
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    navigateSendHistory(-1);
+    return;
+  }
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    navigateSendHistory(1);
+    return;
+  }
+
+  if (
+    event.key !== "Tab" &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    !event.shiftKey
+  ) {
+    sendHistoryIndex = -1;
+  }
 }
 
 function formatLineEndingLabel() {
@@ -690,14 +772,15 @@ async function onSendInput() {
   }
 
   const text = el.sendInput.value;
-  if (!text) {
+  const suffix = getLineEndingSuffix();
+  if (!text && !suffix) {
     return;
   }
 
   try {
-    const suffix = getLineEndingSuffix();
     await serial.write(text + suffix);
     appendOutput(`> ${text}${formatLineEndingLabel()}`, "warn");
+    pushSendHistory(text);
     el.sendInput.value = "";
 
     if (text === "p") {
