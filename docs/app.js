@@ -147,7 +147,7 @@ function init() {
   setConnectionUi(false);
   syncCurrentPortPermission();
   appendOutput(
-    "Welcome — ① Select Port… → ② Connect (38400 baud). View: Text or Hex.",
+    "Welcome — ① Select Port → ② Connect (38400 baud). View: Text or Hex.",
     "warn"
   );
 }
@@ -395,7 +395,31 @@ function renderCurrentPort() {
     el.portDisplay.title = `Current COM port: ${label}`;
   }
   updateSetupHint();
-  updateConnectButton();
+  updateConnectionStepButtons();
+}
+
+/**
+ * @param {HTMLButtonElement} button
+ * @param {boolean} isActive
+ * @param {boolean} isDisabled
+ */
+function setStepButton(button, isActive, isDisabled = false) {
+  button.disabled = isDisabled;
+  button.classList.remove("btn-primary", "btn-step");
+  button.classList.add(isActive ? "btn-primary" : "btn-step");
+}
+
+function updateConnectionStepButtons() {
+  const connected = serial.isConnected;
+  const hasPort = !!currentPort;
+
+  setStepButton(el.btnAddPort, !connected && !hasPort, connected);
+  setStepButton(el.btnConnect, !connected && hasPort, connected || !hasPort);
+  setStepButton(el.btnDisconnect, connected, !connected);
+}
+
+function isPortGranted(port, ports) {
+  return ports.some((granted) => granted === port || isSamePort(granted, port));
 }
 
 async function syncCurrentPortPermission() {
@@ -409,17 +433,12 @@ async function syncCurrentPortPermission() {
     );
   }
 
-  if (currentPort && !ports.some((port) => isSamePort(port, currentPort))) {
+  if (currentPort && ports.length > 0 && !isPortGranted(currentPort, ports)) {
     currentPort = null;
     appendOutput("Selected port permission is no longer available", "warn");
   }
 
   renderCurrentPort();
-}
-
-function updateConnectButton() {
-  const hasSelection = !!currentPort && !serial.isConnected;
-  el.btnConnect.disabled = !hasSelection;
 }
 
 function getSelectedPort() {
@@ -445,13 +464,8 @@ async function onAddPort() {
  * @param {boolean} connected
  */
 function setConnectionUi(connected) {
-  el.btnDisconnect.disabled = !connected;
-  el.btnAddPort.disabled = connected;
   el.baudrate.disabled = connected;
-  updateConnectButton();
-  if (connected) {
-    el.btnConnect.disabled = true;
-  }
+  updateConnectionStepButtons();
 
   const canSend = connected && !imageReceiving;
   el.sendInput.disabled = !canSend;

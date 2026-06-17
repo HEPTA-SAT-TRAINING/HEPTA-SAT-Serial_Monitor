@@ -10,11 +10,13 @@
   <div class="app">
     <header class="toolbar">
       <div class="toolbar-row">
-        <button id="btn-add-port" type="button" class="btn-primary">① Select Port…</button>
-        <span class="toolbar-label">Port:</span>
-        <span id="port-display" class="port-display" title="Currently selected COM port">— no port selected —</span>
-        <button id="btn-connect" type="button" disabled>② Connect</button>
-        <button id="btn-disconnect" type="button" class="btn-secondary" disabled>Disconnect</button>
+        <div class="connection-group">
+          <span class="toolbar-label">Port:</span>
+          <span id="port-display" class="port-display" title="Currently selected COM port">— no port selected —</span>
+          <button id="btn-add-port" type="button" class="btn-primary">① Select Port</button>
+          <button id="btn-connect" type="button" class="btn-step" disabled>② Connect</button>
+          <button id="btn-disconnect" type="button" class="btn-step" disabled>Disconnect</button>
+        </div>
         <label for="baudrate">Baud:</label>
         <select id="baudrate" title="Serial baud rate">
           <option value="300">300</option>
@@ -44,7 +46,7 @@
         <span id="connection-status" class="status-badge disconnected">Disconnected</span>
       </div>
       <p id="setup-hint" class="setup-hint" hidden>
-        Click <strong>Select Port…</strong> to choose the COM port to use now, then click <strong>Connect</strong>.
+        Click <strong>Select Port</strong> to choose the COM port to use now, then click <strong>Connect</strong>.
       </p>
     </header>
 

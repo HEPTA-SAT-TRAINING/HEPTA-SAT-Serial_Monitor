@@ -19,7 +19,7 @@ Use **Chrome, Edge, or Firefox**. **Safari is not supported**. No additional too
 
 ## Usage
 
-1. Click **① Select Port…** and choose the COM port to use in the browser dialog
+1. Click **① Select Port** and choose the COM port to use in the browser dialog
 2. Click **② Connect**
 3. Serial output appears in the main pane
 4. Set **View** to **Text** (line-oriented) or **Hex** (raw byte dump)

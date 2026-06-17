@@ -64,6 +64,16 @@ body {
   gap: 0.4rem 0.6rem;
 }
 
+.connection-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  padding-right: 0.6rem;
+  margin-right: 0.15rem;
+  border-right: 1px solid var(--border);
+}
+
 label {
   color: var(--muted);
   font-size: 0.8rem;
@@ -80,10 +90,36 @@ button {
   cursor: pointer;
 }
 
-.btn-primary {
+button:hover:not(:disabled):not(.btn-step):not(.btn-secondary):not(.btn-icon) {
+  background: var(--accent-hover);
+}
+
+button.btn-primary {
   background: var(--accent);
   border-color: var(--accent);
+  color: #fff;
   font-weight: 600;
+}
+
+button.btn-step {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--muted);
+  font-weight: normal;
+}
+
+button.btn-step:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+button.btn-step:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+button.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 .toolbar-label {
@@ -100,13 +136,16 @@ button {
   border-radius: 2px;
 }
 
-button:hover:not(:disabled) {
-  background: var(--accent-hover);
+button:disabled {
+  cursor: not-allowed;
 }
 
-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+button.btn-step:disabled {
+  opacity: 0.55;
+}
+
+button.btn-primary:disabled {
+  opacity: 0.55;
 }
 
 .btn-secondary {
