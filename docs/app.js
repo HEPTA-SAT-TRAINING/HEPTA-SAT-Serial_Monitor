@@ -31,6 +31,7 @@ const LINE_ENDINGS = {
 
 const PACKET_TIMEOUT_MS = 10000;
 const IMAGE_TIMEOUT_MS = 60000;
+const MAX_COMMAND_LENGTH = 256;
 
 /** @type {SerialConnection} */
 const serial = new SerialConnection();
@@ -61,6 +62,7 @@ let imageProgressLine = null;
 const sendHistory = [];
 let sendHistoryIndex = -1;
 let sendHistoryDraft = "";
+let sendInProgress = false;
 
 const el = {
   portDisplay: document.getElementById("port-display"),
@@ -467,7 +469,7 @@ function setConnectionUi(connected) {
   el.baudrate.disabled = connected;
   updateConnectionStepButtons();
 
-  const canSend = connected && !imageReceiving;
+  const canSend = connected && !imageReceiving && !sendInProgress;
   el.sendInput.disabled = !canSend;
   el.btnSend.disabled = !canSend;
   el.lineEnding.disabled = !canSend;
@@ -767,7 +769,7 @@ async function onDisconnect() {
 }
 
 async function onSendInput() {
-  if (!serial.isConnected || imageReceiving) {
+  if (!serial.isConnected || imageReceiving || sendInProgress) {
     return;
   }
 
@@ -776,6 +778,17 @@ async function onSendInput() {
   if (!text && !suffix) {
     return;
   }
+
+  if (text.length > MAX_COMMAND_LENGTH) {
+    appendOutput(
+      `Send failed: command exceeds the input limit (${MAX_COMMAND_LENGTH} characters).`,
+      "error"
+    );
+    return;
+  }
+
+  sendInProgress = true;
+  setConnectionUi(serial.isConnected);
 
   try {
     await serial.write(text + suffix);
@@ -788,6 +801,9 @@ async function onSendInput() {
     }
   } catch (err) {
     appendOutput(`Send failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+  } finally {
+    sendInProgress = false;
+    setConnectionUi(serial.isConnected);
   }
 }
 

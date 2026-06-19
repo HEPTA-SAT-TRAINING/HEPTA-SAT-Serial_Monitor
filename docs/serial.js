@@ -40,6 +40,8 @@ export class SerialConnection {
     this.onError = null;
     /** @type {(() => void) | null} */
     this.onDisconnect = null;
+    /** @type {Promise<void>} */
+    this._writeQueue = Promise.resolve();
   }
 
   get isConnected() {
@@ -150,12 +152,22 @@ export class SerialConnection {
 
     this.port = null;
     this.reading = false;
+    this._writeQueue = Promise.resolve();
   }
 
   /**
    * @param {string} text
    */
   async write(text) {
+    const task = this._writeQueue.then(() => this._writeNow(text));
+    this._writeQueue = task.catch(() => {});
+    return task;
+  }
+
+  /**
+   * @param {string} text
+   */
+  async _writeNow(text) {
     if (!this.port?.writable) {
       throw new Error("Port is not open for writing");
     }
@@ -164,7 +176,11 @@ export class SerialConnection {
       const data = new TextEncoder().encode(text);
       await writer.write(data);
     } finally {
-      writer.releaseLock();
+      try {
+        writer.releaseLock();
+      } catch {
+        // ignore
+      }
     }
   }
 }
