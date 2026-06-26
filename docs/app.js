@@ -58,6 +58,8 @@ let imageTimer = null;
 let currentPort = null;
 /** @type {HTMLElement | null} */
 let imageProgressLine = null;
+/** @type {Set<number>} */
+let discardedSeqs = new Set();
 /** @type {string[]} */
 const sendHistory = [];
 let sendHistoryIndex = -1;
@@ -83,6 +85,8 @@ const el = {
   imageModal: document.getElementById("image-modal"),
   modalTitle: document.getElementById("modal-title"),
   modalStatus: document.getElementById("modal-status"),
+  modalPacketMap: document.getElementById("modal-packet-map"),
+  modalDecodeHint: document.getElementById("modal-decode-hint"),
   modalPreview: document.getElementById("modal-preview"),
   btnSaveJpeg: document.getElementById("btn-save-jpeg"),
   btnModalClose: document.getElementById("btn-modal-close"),
@@ -542,6 +546,7 @@ function beginImageReceive() {
   imageReceiving = true;
   packetReceiver.reset();
   imageAssembler.reset();
+  discardedSeqs = new Set();
 
   if (currentImageBlob) {
     URL.revokeObjectURL(el.modalPreview.src);
@@ -561,11 +566,30 @@ function beginImageReceive() {
 }
 
 /**
+ * @param {string} errorMessage
+ */
+function trackDiscardedPacket(errorMessage) {
+  const match = /^Discarded packet seq=(\d+):/.exec(errorMessage);
+  if (match) {
+    discardedSeqs.add(Number.parseInt(match[1], 10));
+  }
+}
+
+function formatImageProgressLine() {
+  const summary = imageAssembler.getReceptionSummary();
+  if (!summary) {
+    return "Receiving image... 0 / 0 bytes";
+  }
+  return `Receiving image... ${summary.receivedBytes} / ${summary.imageSize} bytes (${summary.receivedCount}/${summary.dataPacketCount} DATA packets)`;
+}
+
+/**
  * @param {Uint8Array} chunk
  */
 function processImageChunk(chunk) {
   const packets = packetReceiver.push(chunk);
   for (const error of packetReceiver.drainErrors()) {
+    trackDiscardedPacket(error);
     appendOutput(error, "warn");
   }
 
@@ -585,12 +609,7 @@ function processImageChunk(chunk) {
   }
 
   if (imageReceiving && packetReceiver.drainFooterCount() > 0) {
-    try {
-      completeImageReceive("IMG_END fallback");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      abortImageReceive(`Image error: ${msg}`);
-    }
+    finishImageReceiveAttempt("IMG_END fallback");
   }
 }
 
@@ -606,7 +625,7 @@ function handleImagePacket(packet) {
   imageAssembler.accept(packet);
   if (!hadMeta && imageAssembler.meta) {
     const meta = imageAssembler.meta;
-    updateImageProgressLine(`Receiving image... 0 / ${meta.imageSize} bytes`);
+    updateImageProgressLine(formatImageProgressLine());
     if (displayMode !== DisplayMode.HEX) {
       appendOutput(
         `START: id=${meta.imageId}, size=${meta.imageSize}, image_crc=0x${meta.imageCrc16.toString(16).padStart(4, "0")}, total_packets=${packet.total}`,
@@ -615,30 +634,107 @@ function handleImagePacket(packet) {
     }
   }
   if (imageAssembler.meta) {
-    updateImageProgressLine(
-      `Receiving image... ${imageAssembler.receivedBytes()} / ${imageAssembler.meta.imageSize} bytes`
-    );
+    updateImageProgressLine(formatImageProgressLine());
   }
   if (packet.type === PACKET_TYPE_END) {
-    completeImageReceive("END packet");
+    finishImageReceiveAttempt("END packet");
   }
 }
 
-function completeImageReceive(terminalSource) {
-  const result = imageAssembler.finalize();
+/**
+ * @param {string} terminalSource
+ * @param {string} [warningReason]
+ */
+function finishImageReceiveAttempt(terminalSource, warningReason) {
+  try {
+    const result = resolveImageReceiveResult();
+    presentImageReceiveResult(result, terminalSource, warningReason);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    abortImageReceive(warningReason ? `${warningReason}: ${msg}` : `Image error: ${msg}`);
+  }
+}
+
+function resolveImageReceiveResult() {
+  try {
+    const strict = imageAssembler.finalize();
+    return {
+      ...strict,
+      damaged: false,
+      missingSeqs: [],
+      receivedCount: imageAssembler.dataPacketCount,
+      dataPacketCount: imageAssembler.dataPacketCount,
+      crcOk: true,
+    };
+  } catch {
+    const partial = imageAssembler.finalizePartial();
+    if (!partial.meta || partial.receivedCount === 0) {
+      throw new Error("No image data received");
+    }
+    return { ...partial, damaged: true };
+  }
+}
+
+/**
+ * @param {ReturnType<typeof resolveImageReceiveResult>} result
+ * @param {string} terminalSource
+ * @param {string} [warningReason]
+ */
+function presentImageReceiveResult(result, terminalSource, warningReason) {
   lastImageId = result.meta.imageId;
   currentImageBlob = new Blob([result.image], { type: "image/jpeg" });
 
-  const recoveryText =
-    result.recoveredSeq === null ? "" : `, recovered packet ${result.recoveredSeq}`;
-  const summary =
-    `Image complete via ${terminalSource}: ${result.meta.imageSize} bytes, id=${result.meta.imageId}, CRC OK (0x${result.computedCrc.toString(16).padStart(4, "0")})${recoveryText}`;
-
   clearImageProgressLine();
-  appendOutput(summary, "warn");
-  showImageModal(currentImageBlob, result.meta.imageSize, result.meta.imageId, recoveryText);
+
+  if (result.damaged) {
+    if (warningReason) {
+      appendOutput(warningReason, "warn");
+    }
+    const summary = buildDamagedSummary(result, terminalSource);
+    appendOutput(summary, "warn");
+    showDamagedImageModal(currentImageBlob, result, terminalSource, discardedSeqs);
+  } else {
+    const recoveryText =
+      result.recoveredSeq === null ? "" : `, recovered packet ${result.recoveredSeq}`;
+    const summary =
+      `Image complete via ${terminalSource}: ${result.meta.imageSize} bytes, id=${result.meta.imageId}, CRC OK (0x${result.computedCrc.toString(16).padStart(4, "0")})${recoveryText}`;
+    appendOutput(summary, "warn");
+    showImageModal(currentImageBlob, result.meta.imageSize, result.meta.imageId, recoveryText);
+  }
 
   finishImageReceive();
+}
+
+/**
+ * @param {ReturnType<typeof resolveImageReceiveResult>} result
+ * @param {string} terminalSource
+ */
+function buildDamagedSummary(result, terminalSource) {
+  const parts = [
+    `Image damaged via ${terminalSource}: ${result.receivedCount}/${result.dataPacketCount} DATA packets`,
+  ];
+  if (result.missingSeqs.length > 0) {
+    parts.push(`${result.missingSeqs.length} missing`);
+  }
+  if (result.recoveredSeq !== null) {
+    parts.push(`recovered packet ${result.recoveredSeq}`);
+  }
+  if (discardedSeqs.size > 0) {
+    parts.push(`${discardedSeqs.size} discarded (CRC error)`);
+  }
+  if (!result.crcOk) {
+    parts.push(
+      `CRC mismatch (expected 0x${result.meta.imageCrc16.toString(16).padStart(4, "0")}, got 0x${result.computedCrc.toString(16).padStart(4, "0")})`
+    );
+  }
+  return parts.join(", ");
+}
+
+function attemptPartialImageReceive(reason) {
+  if (!imageReceiving) {
+    return;
+  }
+  finishImageReceiveAttempt(reason, reason);
 }
 
 /**
@@ -713,7 +809,7 @@ function resetPacketTimeout() {
     clearTimeout(packetTimer);
   }
   packetTimer = setTimeout(() => {
-    abortImageReceive("Packet timeout (10 s)");
+    attemptPartialImageReceive("Packet timeout (10 s)");
   }, PACKET_TIMEOUT_MS);
 }
 
@@ -722,7 +818,7 @@ function startImageTimeout() {
     clearTimeout(imageTimer);
   }
   imageTimer = setTimeout(() => {
-    abortImageReceive("Image timeout (60 s)");
+    attemptPartialImageReceive("Image timeout (60 s)");
   }, IMAGE_TIMEOUT_MS);
 }
 
@@ -817,10 +913,119 @@ function showImageModal(blob, size, imageId, recoveryText) {
   if (el.modalPreview.src) {
     URL.revokeObjectURL(el.modalPreview.src);
   }
+  el.modalPreview.onerror = null;
   el.modalPreview.src = URL.createObjectURL(blob);
   el.modalTitle.textContent = "Image received";
   el.modalStatus.textContent = `${size} bytes, id=${imageId}${recoveryText}`;
+  el.modalPacketMap.hidden = true;
+  el.modalPacketMap.replaceChildren();
+  el.modalDecodeHint.hidden = true;
+  el.modalDecodeHint.textContent = "";
   el.imageModal.hidden = false;
+}
+
+/**
+ * @param {Blob} blob
+ * @param {ReturnType<typeof resolveImageReceiveResult>} result
+ * @param {string} terminalSource
+ * @param {Set<number>} discarded
+ */
+function showDamagedImageModal(blob, result, terminalSource, discarded) {
+  if (el.modalPreview.src) {
+    URL.revokeObjectURL(el.modalPreview.src);
+  }
+
+  const statusParts = [
+    `${result.receivedCount}/${result.dataPacketCount} DATA packets received`,
+  ];
+  if (result.missingSeqs.length > 0) {
+    statusParts.push(`${result.missingSeqs.length} missing`);
+  }
+  if (result.recoveredSeq !== null) {
+    statusParts.push(`recovered packet ${result.recoveredSeq}`);
+  }
+  if (discarded.size > 0) {
+    statusParts.push(`${discarded.size} discarded (CRC error)`);
+  }
+  if (!result.crcOk) {
+    statusParts.push(
+      `CRC mismatch (expected 0x${result.meta.imageCrc16.toString(16).padStart(4, "0")}, got 0x${result.computedCrc.toString(16).padStart(4, "0")})`
+    );
+  }
+  statusParts.push(`via ${terminalSource}`);
+
+  el.modalTitle.textContent = "Image received (damaged)";
+  el.modalStatus.textContent = statusParts.join(", ");
+  renderPacketMap(result, discarded);
+
+  el.modalDecodeHint.hidden = true;
+  el.modalDecodeHint.textContent = "";
+  el.modalPreview.onerror = () => {
+    el.modalDecodeHint.hidden = false;
+    el.modalDecodeHint.textContent =
+      "Browser could not decode this JPEG (data loss or corruption).";
+  };
+  el.modalPreview.src = URL.createObjectURL(blob);
+  el.imageModal.hidden = false;
+}
+
+/**
+ * @param {ReturnType<typeof resolveImageReceiveResult>} result
+ * @param {Set<number>} discarded
+ */
+function appendPacketMapLegendItem(parent, label, state) {
+  const item = document.createElement("span");
+  item.className = "packet-map-legend-item";
+
+  const swatch = document.createElement("span");
+  swatch.className = `packet-map-swatch ${state}`;
+  swatch.setAttribute("aria-hidden", "true");
+
+  const text = document.createElement("span");
+  text.textContent = label;
+
+  item.append(swatch, text);
+  parent.appendChild(item);
+}
+
+/**
+ * @param {ReturnType<typeof resolveImageReceiveResult>} result
+ * @param {Set<number>} discarded
+ */
+function renderPacketMap(result, discarded) {
+  const map = el.modalPacketMap;
+  map.replaceChildren();
+
+  const legend = document.createElement("div");
+  legend.className = "packet-map-legend";
+  appendPacketMapLegendItem(legend, "Received", "received");
+  appendPacketMapLegendItem(legend, "Parity recovered", "recovered");
+  appendPacketMapLegendItem(legend, "Missing / discarded", "missing");
+  map.appendChild(legend);
+
+  const cells = document.createElement("div");
+  cells.className = "packet-map-cells";
+
+  const missingSet = new Set(result.missingSeqs);
+  for (let seq = 1; seq <= result.dataPacketCount; seq++) {
+    const cell = document.createElement("span");
+    cell.className = "packet-map-cell";
+    cell.title = `DATA packet ${seq}`;
+    cell.textContent = String(seq);
+
+    if (result.recoveredSeq === seq) {
+      cell.classList.add("recovered");
+    } else if (missingSet.has(seq) || discarded.has(seq)) {
+      cell.classList.add("missing");
+    } else {
+      cell.classList.add("received");
+    }
+
+    cells.appendChild(cell);
+  }
+
+  map.appendChild(cells);
+  map.hidden = false;
 }
 
 function hideImageModal() {

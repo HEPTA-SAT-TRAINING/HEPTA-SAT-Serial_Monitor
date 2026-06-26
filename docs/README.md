@@ -107,5 +107,7 @@ docs/
 
 - **Cannot connect**: Use Chrome/Edge/Firefox over HTTPS or `localhost` (Safari is not supported)
 - **No data**: Confirm baud rate 38400 and XBee `BD=5` on both modules
-- **Image error**: A single lost packet is recovered automatically; retry `p` if multiple losses occur
-- **Packet timeout**: Transfer aborts after 10 s without a valid packet; image overall timeout is 60 s
+- **Image OK**: A single lost DATA packet is recovered automatically via XOR parity
+- **Damaged image**: If 2+ DATA packets are missing, CRC fails, or a timeout occurs while some data was received, the app shows an **Image received (damaged)** modal with a packet map (green / yellow / red) and may still attempt to preview the corrupt JPEG
+- **Decode failed**: A damaged JPEG may not render in the browser; you can still save the received bytes from the modal
+- **Packet timeout**: After 10 s without a valid packet, the app tries to show a damaged image if any DATA was received; otherwise it shows an error. Overall image timeout is 60 s
