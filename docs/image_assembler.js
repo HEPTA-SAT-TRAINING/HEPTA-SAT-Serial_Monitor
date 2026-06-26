@@ -141,52 +141,107 @@ export class ImageAssembler {
     return total;
   }
 
+  getReceptionSummary() {
+    if (!this.meta) {
+      return null;
+    }
+    const missingSeqs = [];
+    for (let seq = 1; seq <= this.dataPacketCount; seq++) {
+      if (!this.dataPackets.has(seq)) {
+        missingSeqs.push(seq);
+      }
+    }
+    return {
+      receivedCount: this.dataPacketCount - missingSeqs.length,
+      dataPacketCount: this.dataPacketCount,
+      missingSeqs,
+      receivedBytes: this.receivedBytes(),
+      imageSize: this.meta.imageSize,
+    };
+  }
+
   finalize() {
+    const result = this.finalizePartial();
+    if (result.missingSeqs.length > 1 || (result.missingSeqs.length === 1 && !this.parity)) {
+      throw new Error(
+        `Cannot recover image: ${result.missingSeqs.length} DATA packet(s) missing`
+      );
+    }
+    if (!result.crcOk) {
+      throw new Error(
+        `Image CRC mismatch: expected 0x${hex16(result.meta.imageCrc16)}, got 0x${hex16(result.computedCrc)}`
+      );
+    }
+    return {
+      image: result.image,
+      meta: result.meta,
+      recoveredSeq: result.recoveredSeq,
+      computedCrc: result.computedCrc,
+    };
+  }
+
+  finalizePartial() {
     if (!this.meta) {
       throw new Error("START packet was not received");
     }
 
-    const missing = [];
+    const packets = new Map(this.dataPackets);
+    const missingBeforeRecovery = [];
     for (let seq = 1; seq <= this.dataPacketCount; seq++) {
-      if (!this.dataPackets.has(seq)) {
-        missing.push(seq);
+      if (!packets.has(seq)) {
+        missingBeforeRecovery.push(seq);
       }
     }
-    if (missing.length > 1 || (missing.length === 1 && !this.parity)) {
-      throw new Error(
-        `Cannot recover image: ${missing.length} DATA packet(s) missing`
+
+    let recoveredSeq = null;
+    if (missingBeforeRecovery.length === 1 && this.parity) {
+      recoveredSeq = missingBeforeRecovery[0];
+      packets.set(
+        recoveredSeq,
+        this.recoverMissingWithParity(recoveredSeq, packets)
       );
     }
 
-    if (missing.length === 1) {
-      const recovered = this.parity.slice();
-      for (const payload of this.dataPackets.values()) {
-        for (let i = 0; i < payload.length; i++) {
-          recovered[i] ^= payload[i];
-        }
+    const missingSeqs = [];
+    for (let seq = 1; seq <= this.dataPacketCount; seq++) {
+      if (!packets.has(seq)) {
+        missingSeqs.push(seq);
       }
-      const missingSeq = missing[0];
-      this.dataPackets.set(
-        missingSeq,
-        recovered.slice(0, this.expectedDataLength(missingSeq))
-      );
     }
 
     const image = new Uint8Array(this.meta.imageSize);
     let offset = 0;
     for (let seq = 1; seq <= this.dataPacketCount; seq++) {
-      const payload = this.dataPackets.get(seq);
-      image.set(payload, offset);
-      offset += payload.length;
+      const payload = packets.get(seq);
+      if (payload) {
+        image.set(payload, offset);
+        offset += payload.length;
+      } else {
+        offset += this.expectedDataLength(seq);
+      }
     }
 
     const computedCrc = crc16CcittFalse(image);
-    if (computedCrc !== this.meta.imageCrc16) {
-      throw new Error(
-        `Image CRC mismatch: expected 0x${hex16(this.meta.imageCrc16)}, got 0x${hex16(computedCrc)}`
-      );
+    return {
+      image,
+      meta: this.meta,
+      missingSeqs,
+      recoveredSeq,
+      receivedCount: this.dataPacketCount - missingBeforeRecovery.length,
+      dataPacketCount: this.dataPacketCount,
+      computedCrc,
+      crcOk: computedCrc === this.meta.imageCrc16,
+    };
+  }
+
+  recoverMissingWithParity(missingSeq, packets) {
+    const recovered = this.parity.slice();
+    for (const payload of packets.values()) {
+      for (let i = 0; i < payload.length; i++) {
+        recovered[i] ^= payload[i];
+      }
     }
-    return { image, meta: this.meta, recoveredSeq: missing[0] ?? null, computedCrc };
+    return recovered.slice(0, this.expectedDataLength(missingSeq));
   }
 
   expectedDataLength(seq) {
