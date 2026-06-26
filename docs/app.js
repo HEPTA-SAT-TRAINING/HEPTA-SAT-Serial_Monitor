@@ -68,8 +68,7 @@ let sendInProgress = false;
 
 const el = {
   portDisplay: document.getElementById("port-display"),
-  btnAddPort: document.getElementById("btn-add-port"),
-  btnConnect: document.getElementById("btn-connect"),
+  btnSelectPort: document.getElementById("btn-select-port"),
   btnDisconnect: document.getElementById("btn-disconnect"),
   btnClear: document.getElementById("btn-clear"),
   btnSaveLog: document.getElementById("btn-save-log"),
@@ -120,8 +119,7 @@ function init() {
     void syncCurrentPortPermission();
   };
 
-  el.btnAddPort.addEventListener("click", onAddPort);
-  el.btnConnect.addEventListener("click", onConnect);
+  el.btnSelectPort.addEventListener("click", () => void onSelectPort());
   el.btnDisconnect.addEventListener("click", onDisconnect);
   el.btnClear.addEventListener("click", clearOutput);
   el.btnSaveLog.addEventListener("click", () => void saveLog());
@@ -153,7 +151,7 @@ function init() {
   setConnectionUi(false);
   syncCurrentPortPermission();
   appendOutput(
-    "Welcome — ① Select Port → ② Connect (38400 baud). View: Text or Hex.",
+    "Welcome — click Select & Connect Port to open your COM port (38400 baud). View: Text or Hex.",
     "warn"
   );
 }
@@ -373,8 +371,7 @@ function clearImageProgressLine() {
 }
 
 function updateSetupHint() {
-  const needsPort = !currentPort && !serial.isConnected;
-  el.setupHint.hidden = !needsPort;
+  el.setupHint.hidden = serial.isConnected;
 }
 
 /**
@@ -401,27 +398,15 @@ function renderCurrentPort() {
     el.portDisplay.title = `Current COM port: ${label}`;
   }
   updateSetupHint();
-  updateConnectionStepButtons();
+  updateConnectionButtons();
 }
 
-/**
- * @param {HTMLButtonElement} button
- * @param {boolean} isActive
- * @param {boolean} isDisabled
- */
-function setStepButton(button, isActive, isDisabled = false) {
-  button.disabled = isDisabled;
-  button.classList.remove("btn-primary", "btn-step");
-  button.classList.add(isActive ? "btn-primary" : "btn-step");
-}
-
-function updateConnectionStepButtons() {
+function updateConnectionButtons() {
   const connected = serial.isConnected;
-  const hasPort = !!currentPort;
 
-  setStepButton(el.btnAddPort, !connected && !hasPort, connected);
-  setStepButton(el.btnConnect, !connected && hasPort, connected || !hasPort);
-  setStepButton(el.btnDisconnect, connected, !connected);
+  el.btnSelectPort.disabled = connected;
+  el.btnSelectPort.textContent = currentPort ? "Change Port…" : "Select & Connect Port";
+  el.btnDisconnect.disabled = !connected;
 }
 
 function isPortGranted(port, ports) {
@@ -451,18 +436,32 @@ function getSelectedPort() {
   return currentPort;
 }
 
-async function onAddPort() {
+/**
+ * @returns {Promise<SerialPort | null>}
+ */
+async function requestPortSelection() {
   try {
     const port = await SerialConnection.requestNewPort();
     currentPort = port;
     renderCurrentPort();
     appendOutput(`Port selected: ${formatPortLabel(port, 0)}`, "warn");
-    appendOutput("Now click Connect (step ②).", "warn");
+    return port;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (!msg.includes("cancel")) {
       appendOutput(`Select port failed: ${msg}`, "error");
     }
+    return null;
+  }
+}
+
+async function onSelectPort() {
+  if (serial.isConnected) {
+    return;
+  }
+  const port = await requestPortSelection();
+  if (port) {
+    await connectToSelectedPort();
   }
 }
 
@@ -471,7 +470,7 @@ async function onAddPort() {
  */
 function setConnectionUi(connected) {
   el.baudrate.disabled = connected;
-  updateConnectionStepButtons();
+  renderCurrentPort();
 
   const canSend = connected && !imageReceiving && !sendInProgress;
   el.sendInput.disabled = !canSend;
@@ -822,15 +821,14 @@ function startImageTimeout() {
   }, IMAGE_TIMEOUT_MS);
 }
 
-async function onConnect() {
-  let port = getSelectedPort();
+async function connectToSelectedPort() {
+  if (serial.isConnected) {
+    return;
+  }
+
+  const port = getSelectedPort();
   if (!port) {
-    appendOutput("No port selected — opening port picker…", "warn");
-    await onAddPort();
-    port = getSelectedPort();
-    if (!port) {
-      return;
-    }
+    return;
   }
 
   const baud = parseInt(el.baudrate.value, 10);
