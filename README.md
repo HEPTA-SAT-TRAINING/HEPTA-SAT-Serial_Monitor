@@ -16,3 +16,24 @@ https://hepta-sat-training.github.io/HEPTA-SAT-Serial_Monitor/
 4. Click **Disconnect** when you need to release the port for other apps
 
 See [docs/README.md](docs/README.md) for full usage, display modes, and protocol details.
+
+## Deployment (maintainers)
+
+Production builds use **esbuild** to bundle `docs/` into `dist/` with content-hashed filenames (`app-XXXX.js`, `styles-XXXX.css`) so browsers never serve stale JavaScript after an update.
+
+```bash
+npm install
+npm run build    # outputs to dist/
+```
+
+Pushes to `main` run `.github/workflows/deploy.yml`, which builds and deploys `dist/` to GitHub Pages.
+
+**One-time GitHub setup:** In the repository **Settings → Pages**, set **Source** to **GitHub Actions** (not “Deploy from branch /docs”). After the first successful workflow run, the live site uses the bundled build.
+
+**Local development** still serves `docs/` directly (no build required):
+
+```bash
+cd docs
+python -m http.server 8080
+# open http://localhost:8080
+```

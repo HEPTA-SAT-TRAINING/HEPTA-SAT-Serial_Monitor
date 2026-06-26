@@ -106,6 +106,7 @@ docs/
 ## Troubleshooting
 
 - **Cannot connect**: Use Chrome/Edge/Firefox over HTTPS or `localhost` (Safari is not supported)
+- **Stale UI after an update**: The production site uses content-hashed bundles; a normal reload should pick up changes. If buttons stop working right after a deploy, try a hard refresh (`Ctrl+Shift+R`) once while the new GitHub Pages build is rolling out
 - **No data**: Confirm baud rate 38400 and XBee `BD=5` on both modules
 - **Image OK**: A single lost DATA packet is recovered automatically via XOR parity
 - **Damaged image**: If 2+ DATA packets are missing, CRC fails, or a timeout occurs while some data was received, the app shows an **Image received (damaged)** modal with a packet map (green / yellow / red) and may still attempt to preview the corrupt JPEG
