@@ -13,9 +13,8 @@
         <div class="connection-group">
           <span class="toolbar-label">Port:</span>
           <span id="port-display" class="port-display" title="Currently selected COM port">— no port selected —</span>
-          <button id="btn-add-port" type="button" class="btn-primary">① Select Port</button>
-          <button id="btn-connect" type="button" class="btn-step" disabled>② Connect</button>
-          <button id="btn-disconnect" type="button" class="btn-step" disabled>Disconnect</button>
+          <button id="btn-select-port" type="button" class="btn-primary" title="Pick a COM port and connect (disconnect first to switch ports)">Select &amp; Connect Port</button>
+          <button id="btn-disconnect" type="button" class="btn-step" disabled title="Close the port so other apps can use it">Disconnect</button>
         </div>
         <label for="baudrate">Baud:</label>
         <select id="baudrate" title="Serial baud rate">
@@ -46,7 +45,7 @@
         <span id="connection-status" class="status-badge disconnected">Disconnected</span>
       </div>
       <p id="setup-hint" class="setup-hint" hidden>
-        Click <strong>Select Port</strong> to choose the COM port to use now, then click <strong>Connect</strong>.
+        Click <strong>Select &amp; Connect Port</strong> and choose the COM port in the browser dialog.
       </p>
     </header>
 
